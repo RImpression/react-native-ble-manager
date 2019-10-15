@@ -33,14 +33,7 @@ public class LegacyScanManager extends ScanManager {
 						public void run() {
 							Log.i(bleManager.LOG_TAG, "DiscoverPeripheral: " + device.getName());
 
-                            Peripheral peripheral = bleManager.getPeripheral(device);
-                            if (peripheral == null) {
-                            	peripheral = new Peripheral(device, rssi, scanRecord, bleManager.getReactContext());
-							} else {
-                            	peripheral.updateData(scanRecord);
-                            	peripheral.updateRssi(rssi);
-							}
-                            bleManager.savePeripheral(peripheral);
+                            Peripheral peripheral = bleManager.savePeripheral(device, rssi, scanRecord);
 
 							WritableMap map = peripheral.asWritableMap();
 							bleManager.sendEvent("BleManagerDiscoverPeripheral", map);

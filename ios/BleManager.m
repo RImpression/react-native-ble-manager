@@ -312,21 +312,10 @@ RCT_EXPORT_METHOD(scan:(NSArray *)serviceUUIDStrings timeoutSeconds:(nonnull NSN
     NSLog(@"scan with timeout %@", timeoutSeconds);
     
     // Clear the peripherals before scanning again, otherwise cannot connect again after disconnection
-    // Only clear peripherals that are not connected - otherwise connections fail silently (without any
-    // onDisconnect* callback).
     @synchronized(peripherals) {
-      NSMutableArray *connectedPeripherals = [NSMutableArray array];
-      for (CBPeripheral *peripheral in peripherals) {
-          if (([peripheral state] != CBPeripheralStateConnected) &&
-              ([peripheral state] != CBPeripheralStateConnecting)) {
-              [connectedPeripherals addObject:peripheral];
-          }
-      }
-      for (CBPeripheral *p in connectedPeripherals) {
-          [peripherals removeObject:p];
-      }
+        [peripherals removeAllObjects];
     }
-
+    
     NSArray * services = [RCTConvert NSArray:serviceUUIDStrings];
     NSMutableArray *serviceUUIDs = [NSMutableArray new];
     NSDictionary *options = nil;
@@ -470,26 +459,44 @@ RCT_EXPORT_METHOD(checkState)
     }
 }
 
-RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID message:(NSArray*)message maxByteSize:(NSInteger)maxByteSize callback:(nonnull RCTResponseSenderBlock)callback)
+//16进制字符串转换成16进制byte数组，每两位转换
+- (NSData *)hexToBytes:(NSString *)str{
+    NSMutableData* data = [NSMutableData data];
+    int idx;
+    for (idx = 0; idx+2 <= str.length; idx+=2) {
+        NSRange range = NSMakeRange(idx, 2);
+        NSString* hexStr = [str substringWithRange:range];
+        NSScanner* scanner = [NSScanner scannerWithString:hexStr];
+        unsigned int intValue;
+        [scanner scanHexInt:&intValue];
+        [data appendBytes:&intValue length:1];
+    }
+    return data;
+}
+
+RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID message:(NSString*)message maxByteSize:(NSInteger)maxByteSize callback:(nonnull RCTResponseSenderBlock)callback)
 {
     NSLog(@"Write");
     
     BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyWrite callback:callback];
     
-    unsigned long c = [message count];
-    uint8_t *bytes = malloc(sizeof(*bytes) * c);
+    // unsigned long c = [message count];
+    // uint8_t *bytes = malloc(sizeof(*bytes) * c);
     
-    unsigned i;
-    for (i = 0; i < c; i++)
-    {
-        NSNumber *number = [message objectAtIndex:i];
-        int byte = [number intValue];
-        bytes[i] = byte;
-    }
-    NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
+    // unsigned i;
+    // for (i = 0; i < c; i++)
+    // {
+    //     NSNumber *number = [message objectAtIndex:i];
+    //     int byte = [number intValue];
+    //     bytes[i] = byte;
+    // }
+    // NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
+
+    NSData *dataMessage = [self hexToBytes:message];
+    NSLog(@"byte[]:%@",dataMessage);
     
     if (context) {
-        RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[message count], message);
+        // RCTLogInfo(@"Message to write(%lu): %@ ", (unsigned long)[message count], message);
         CBPeripheral *peripheral = [context peripheral];
         CBCharacteristic *characteristic = [context characteristic];
         
@@ -523,22 +530,24 @@ RCT_EXPORT_METHOD(write:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUI
 }
 
 
-RCT_EXPORT_METHOD(writeWithoutResponse:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID message:(NSArray*)message maxByteSize:(NSInteger)maxByteSize queueSleepTime:(NSInteger)queueSleepTime callback:(nonnull RCTResponseSenderBlock)callback)
+RCT_EXPORT_METHOD(writeWithoutResponse:(NSString *)deviceUUID serviceUUID:(NSString*)serviceUUID  characteristicUUID:(NSString*)characteristicUUID message:(NSString*)message maxByteSize:(NSInteger)maxByteSize queueSleepTime:(NSInteger)queueSleepTime callback:(nonnull RCTResponseSenderBlock)callback)
 {
     NSLog(@"writeWithoutResponse");
     
     BLECommandContext *context = [self getData:deviceUUID serviceUUIDString:serviceUUID characteristicUUIDString:characteristicUUID prop:CBCharacteristicPropertyWriteWithoutResponse callback:callback];
-    unsigned long c = [message count];
-    uint8_t *bytes = malloc(sizeof(*bytes) * c);
+    // unsigned long c = [message count];
+    // uint8_t *bytes = malloc(sizeof(*bytes) * c);
     
-    unsigned i;
-    for (i = 0; i < c; i++)
-    {
-        NSNumber *number = [message objectAtIndex:i];
-        int byte = [number intValue];
-        bytes[i] = byte;
-    }
-    NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
+    // unsigned i;
+    // for (i = 0; i < c; i++)
+    // {
+    //     NSNumber *number = [message objectAtIndex:i];
+    //     int byte = [number intValue];
+    //     bytes[i] = byte;
+    // }
+    // NSData *dataMessage = [NSData dataWithBytesNoCopy:bytes length:c freeWhenDone:YES];
+
+    NSData *dataMessage = [self hexToBytes:message];
     if (context) {
         if ([dataMessage length] > maxByteSize) {
             NSUInteger length = [dataMessage length];
@@ -763,8 +772,6 @@ RCT_EXPORT_METHOD(requestMTU:(NSString *)deviceUUID mtu:(NSInteger)mtu callback:
             [self sendEventWithName:@"BleManagerConnectPeripheral" body:@{@"peripheral": [peripheral uuidAsString]}];
         }
     });
-
-    [writeQueue removeAllObjects];
 }
 
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error {
